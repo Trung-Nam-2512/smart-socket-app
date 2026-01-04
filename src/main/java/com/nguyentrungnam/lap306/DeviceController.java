@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.Optional;
 
 @RestController
-@RequestMapping("/devices")
+@RequestMapping("/api/devices")
 public class DeviceController {
     @Autowired
     private DeviceRepository deviceRepository;

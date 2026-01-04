@@ -10,8 +10,8 @@ import java.time.ZoneId;
  */
 @Entity
 @Table(name = "power_consumption_history", indexes = {
-    @Index(name = "idx_timestamp", columnList = "timestamp"),
-    @Index(name = "idx_device_timestamp", columnList = "deviceId,timestamp")
+        @Index(name = "idx_timestamp", columnList = "timestamp"),
+        @Index(name = "idx_device_timestamp", columnList = "deviceId,timestamp")
 })
 public class PowerConsumptionHistory {
     @Id
@@ -53,8 +53,8 @@ public class PowerConsumptionHistory {
         this.timestamp = LocalDateTime.now(VIETNAM_ZONE);
     }
 
-    public PowerConsumptionHistory(Long deviceId, Double voltage, Double current, 
-                                   Double power, Double humidity, Integer relay) {
+    public PowerConsumptionHistory(Long deviceId, Double voltage, Double current,
+            Double power, Double humidity, Integer relay) {
         this.deviceId = deviceId;
         this.voltage = voltage;
         this.current = current;
@@ -130,4 +130,3 @@ public class PowerConsumptionHistory {
         this.timestamp = timestamp;
     }
 }
-

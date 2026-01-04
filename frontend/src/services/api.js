@@ -58,37 +58,37 @@ class ApiService {
 
     /**
      * Get all devices
-     * GET /devices
+     * GET /api/devices
      */
     async getAllDevices() {
-        const response = await this.request('/devices', { method: 'GET' });
+        const response = await this.request('/api/devices', { method: 'GET' });
         return response.data;
     }
 
     /**
      * Get device by ID
-     * GET /devices/{id}
+     * GET /api/devices/{id}
      */
     async getDeviceById(id) {
-        const response = await this.request(`/devices/${id}`, { method: 'GET' });
+        const response = await this.request(`/api/devices/${id}`, { method: 'GET' });
         return response.data;
     }
 
     /**
      * Get device by topic
-     * GET /devices/by-topic?topic={topic}
+     * GET /api/devices/by-topic?topic={topic}
      */
     async getDeviceByTopic(topic) {
-        const response = await this.request(`/devices/by-topic?topic=${encodeURIComponent(topic)}`, { method: 'GET' });
+        const response = await this.request(`/api/devices/by-topic?topic=${encodeURIComponent(topic)}`, { method: 'GET' });
         return response.data;
     }
 
     /**
      * Create a new device
-     * POST /devices
+     * POST /api/devices
      */
     async createDevice(deviceData) {
-        const response = await this.request('/devices', {
+        const response = await this.request('/api/devices', {
             method: 'POST',
             body: JSON.stringify(deviceData),
         });
@@ -105,7 +105,7 @@ class ApiService {
         // Convert object to string if needed
         const payloadString = typeof payload === 'object' ? JSON.stringify(payload) : payload;
 
-        const url = `${this.baseURL}/devices/${deviceId}/control`;
+        const url = `${this.baseURL}/api/devices/${deviceId}/control`;
 
         try {
             const response = await fetch(url, {

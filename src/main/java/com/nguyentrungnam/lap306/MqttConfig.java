@@ -46,6 +46,12 @@ public class MqttConfig {
     @Autowired
     private PublishedMessageTracker publishedMessageTracker;
 
+    @Autowired
+    private DeviceMappingService deviceMappingService;
+
+    @Autowired
+    private DeviceRepository deviceRepository;
+
     @Bean
     public MqttPahoClientFactory mqttClientFactory() {
         // ... (Giữ nguyên đoạn này) ...
@@ -113,26 +119,35 @@ public class MqttConfig {
 
                 System.out.println("Nhan tin nhan tu ESP32: Topic=" + topic + ", Payload=" + payload);
 
-                // --- CHỈ XỬ LÝ KHI CÓ DEVICE ID TRONG PAYLOAD ---
-                // Thử lấy deviceId từ payload (bắt buộc)
+                // --- TỰ ĐỘNG LẤY HOẶC TẠO DEVICE ID ---
+                // Bước 1: Thử lấy deviceId từ payload (nếu ESP32 gửi kèm)
                 Long deviceId = extractDeviceIdFromPayload(payload);
 
+                // Bước 2: Xử lý deviceId
                 if (deviceId == null) {
-                    // KHÔNG có deviceId trong payload -> BỎ QUA message hoàn toàn
-                    // Không lưu DB, không push WebSocket, không xử lý gì cả
-                    // Chỉ log cảnh báo 1 lần cho mỗi topic để tránh spam log
-                    if (!warnedTopics.contains(topic)) {
-                        System.out.println("⚠️  BO QUA message - Khong co deviceId trong payload - Topic: " + topic);
-                        System.out.println(
-                                "    KHUYEN NGHI: ESP32 nen gui kem field 'ID', 'deviceId' hoac 'DEVICE_ID' trong payload");
-                        System.out.println("    (Se khong log lai cho topic nay nua de tranh spam)");
-                        warnedTopics.add(topic);
+                    // Không có deviceId trong payload -> Tự động tạo device từ topic
+                    String deviceName = generateDeviceNameFromTopic(topic);
+                    deviceId = deviceMappingService.getOrCreateDeviceId(topic, deviceName);
+                    System.out.println("✓ Tu dong tao/lay deviceId tu topic: " + deviceId + " (Topic: " + topic + ")");
+                } else {
+                    // Có deviceId trong payload -> Kiểm tra device có tồn tại không
+                    if (!deviceRepository.existsById(deviceId)) {
+                        // Device không tồn tại -> Tự động tạo device từ topic
+                        String deviceName = generateDeviceNameFromTopic(topic);
+                        deviceId = deviceMappingService.getOrCreateDeviceId(topic, deviceName);
+                        // Log removed to reduce noise - device auto-created from topic
+                    } else {
+                        // Device tồn tại -> Đảm bảo topic được cập nhật
+                        Device device = deviceRepository.findById(deviceId).orElse(null);
+                        if (device != null && (device.getTopic() == null || !device.getTopic().equals(topic))) {
+                            device.setTopic(topic);
+                            deviceRepository.save(device);
+                            deviceMappingService.clearCacheForTopic(topic);
+                            System.out.println("✓ Da cap nhat topic cho device " + deviceId + ": " + topic);
+                        }
+                        System.out.println("✓ Su dung deviceId tu payload: " + deviceId + " (Topic: " + topic + ")");
                     }
-                    return; // Bỏ qua message này hoàn toàn
                 }
-
-                // Có deviceId -> Xử lý bình thường
-                System.out.println("✓ Su dung deviceId tu payload: " + deviceId + " (Topic: " + topic + ")");
 
                 // ĐẨY SANG WEBSOCKET (chỉ khi có deviceId hợp lệ)
                 mqttToWebSocketService.pushToWebSocket(topic, payload);
@@ -231,6 +246,32 @@ public class MqttConfig {
         }
 
         return trimmed;
+    }
+
+    /**
+     * Tạo tên device tự động từ topic
+     * Ví dụ: home/s3/status -> "Smart Socket S3"
+     */
+    private String generateDeviceNameFromTopic(String topic) {
+        if (topic == null || topic.isEmpty()) {
+            return "Unknown Device";
+        }
+        
+        // Extract số từ topic (ví dụ: s3 -> "S3")
+        String[] parts = topic.split("/");
+        for (String part : parts) {
+            if (part.matches(".*\\d+.*")) {
+                // Tìm số trong phần này
+                String number = part.replaceAll("[^0-9]", "");
+                if (!number.isEmpty()) {
+                    return "Smart Socket " + part.toUpperCase();
+                }
+            }
+        }
+        
+        // Nếu không tìm thấy số, dùng tên topic
+        String lastPart = parts[parts.length - 1];
+        return "Device " + lastPart.substring(0, 1).toUpperCase() + lastPart.substring(1);
     }
 
     // Hàm phụ để code gọn hơn

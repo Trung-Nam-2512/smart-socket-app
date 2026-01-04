@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/telemetry")
+@RequestMapping("/api/telemetry")
 public class TelemetryController {
     @Autowired
     private TelemetryRepository telemetryRepository;

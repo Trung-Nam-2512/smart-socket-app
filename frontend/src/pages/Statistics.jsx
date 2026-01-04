@@ -139,52 +139,10 @@ const Statistics = () => {
       return;
     }
 
-    // Find device topic from devices list
-    let device = devices.find(d => d.id === selectedDeviceId);
-    let deviceTopic = null;
-    let wsTopic = '/topic/home/s3/status'; // Default fallback
-
-    if (device && device.topic) {
-      // Device có trong list và có topic
-      deviceTopic = device.topic;
-      // console.log('✓ Found device in devices list:', device);
-    } else {
-      // Device không có trong list (có thể chỉ có trong PowerConsumptionHistory)
-      // Sử dụng topic mặc định dựa trên pattern: home/s{deviceId}/status
-      // Hoặc nếu deviceId là 111, dùng home/s3/status (vì ESP32 đang gửi lên topic này)
-      // console.warn('⚠️ Device not found in devices list, using default topic pattern');
-      // console.warn('   Device ID:', selectedDeviceId);
-      // console.warn('   Available devices:', devices.map(d => ({ id: d.id, topic: d.topic })));
-
-      // Fallback: Thử tìm pattern từ devicesWithData hoặc dùng mặc định
-      // Nếu deviceId là 111, ESP32 đang gửi lên home/s3/status
-      if (selectedDeviceId === 111) {
-        deviceTopic = 'home/s3/status';
-        wsTopic = '/topic/home/s3/status';
-        // console.log('✓ Using default topic for device 111: home/s3/status');
-      } else {
-        // Thử pattern khác: home/s{lastDigit}/status
-        const lastDigit = selectedDeviceId % 10;
-        deviceTopic = `home/s${lastDigit}/status`;
-        wsTopic = `/topic/home/s${lastDigit}/status`;
-        // console.log(`✓ Using pattern-based topic: ${deviceTopic}`);
-      }
-    }
-
-    // Nếu có deviceTopic từ device, xử lý nó
-    if (deviceTopic && device) {
-      // Determine WebSocket topic from device topic
-      if (deviceTopic.includes('/cmd')) {
-        // home/s3/cmd -> /topic/home/s3/status
-        wsTopic = '/topic/' + deviceTopic.replace('/cmd', '/status');
-      } else if (deviceTopic.includes('/status')) {
-        // home/s3/status -> /topic/home/s3/status
-        wsTopic = '/topic/' + deviceTopic;
-      } else {
-        // Try common pattern: replace last segment with 'status'
-        wsTopic = '/topic/' + deviceTopic.replace(/\/[^/]+$/, '/status');
-      }
-    }
+    // Backend push tất cả MQTT messages lên /topic/sensor
+    // Format: {topic, payload, timestamp}
+    // Frontend cần subscribe vào /topic/sensor và filter theo deviceId
+    const wsTopic = '/topic/sensor';
 
     // console.log(`🔌 [Statistics] Connecting WebSocket for device ${selectedDeviceId}`);
     // console.log(`   Device topic: ${deviceTopic}`);
@@ -205,54 +163,58 @@ const Statistics = () => {
         // console.log('💡 TIP: Check Network tab and filter by "WS" or "sockjs" to see WebSocket connections');
 
         // Subscribe to WebSocket topic
-        unsubscribeRef.current = webSocketService.subscribe(wsTopic, (data) => {
-          // console.log('📡 [Statistics] Received WebSocket data:', data);
+        // Backend gửi format: {topic: "home/s3/status", payload: "{...}", timestamp: ...}
+        unsubscribeRef.current = webSocketService.subscribe(wsTopic, (message) => {
+          try {
+            // Backend gửi object {topic, payload, timestamp}
+            let payloadData = null;
 
-          // Update latestData with realtime data
-          // Data format từ ESP32: {volt, curr, pwr, relay, ID, ...}
-          if (data && typeof data === 'object') {
+            if (message && typeof message === 'object') {
+              // Nếu message có field 'payload', đó là format từ backend
+              if (message.payload) {
+                // Parse payload string thành JSON
+                try {
+                  payloadData = typeof message.payload === 'string'
+                    ? JSON.parse(message.payload)
+                    : message.payload;
+                } catch (e) {
+                  // Nếu payload không phải JSON, thử dùng message trực tiếp
+                  payloadData = message;
+                }
+              } else {
+                // Nếu không có field payload, message chính là data
+                payloadData = message;
+              }
+            } else if (typeof message === 'string') {
+              // Nếu message là string, parse JSON
+              payloadData = JSON.parse(message);
+            }
+
+            if (!payloadData || typeof payloadData !== 'object') {
+              return;
+            }
+
             // Check if this data is for the selected device (by ID)
-            const dataDeviceId = data.ID || data.deviceId || data.DEVICE_ID;
+            const dataDeviceId = payloadData.ID || payloadData.deviceId || payloadData.DEVICE_ID;
 
             // Nếu có deviceId trong data và không khớp với selectedDeviceId, bỏ qua
             if (dataDeviceId && Number(dataDeviceId) !== Number(selectedDeviceId)) {
-              // console.log(`⚠️ Ignoring data for device ${dataDeviceId} (selected: ${selectedDeviceId})`);
               return;
             }
 
             // Update latestData với dữ liệu realtime
             const newData = {
-              power: data.pwr || data.power || 0,
-              voltage: data.volt || data.voltage || 0,
-              current: data.curr || data.current || 0,
-              relay: data.relay || 0,
-              humidity: data.humi || data.humidity || null,
+              power: payloadData.pwr || payloadData.power || 0,
+              voltage: payloadData.volt || payloadData.voltage || 0,
+              current: payloadData.curr || payloadData.current || 0,
+              relay: payloadData.relay || 0,
+              humidity: payloadData.humi || payloadData.humidity || null,
               timestamp: new Date().toISOString(),
             };
 
-            // console.log(`✓ Updating latestData:`, newData);
             setLatestData(newData);
-          } else if (typeof data === 'string') {
-            // Nếu data là string, thử parse JSON
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed && typeof parsed === 'object') {
-                const dataDeviceId = parsed.ID || parsed.deviceId || parsed.DEVICE_ID;
-                if (dataDeviceId && Number(dataDeviceId) !== Number(selectedDeviceId)) {
-                  return;
-                }
-                setLatestData({
-                  power: parsed.pwr || parsed.power || 0,
-                  voltage: parsed.volt || parsed.voltage || 0,
-                  current: parsed.curr || parsed.current || 0,
-                  relay: parsed.relay || 0,
-                  humidity: parsed.humi || parsed.humidity || null,
-                  timestamp: new Date().toISOString(),
-                });
-              }
-            } catch (e) {
-              // console.error('Error parsing WebSocket data:', e);
-            }
+          } catch (e) {
+            // console.error('Error parsing WebSocket data:', e);
           }
         });
 

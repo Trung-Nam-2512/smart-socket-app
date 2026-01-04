@@ -21,14 +21,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     // List of API path prefixes that should not be handled by SPA routing
     private static final List<String> API_PATHS = Arrays.asList(
-        "/api/",
-        "/devices",
-        "/ws-sensor",
-        "/ws-sensor-sockjs"
-    );
+            "/api/",
+            "/devices",
+            "/ws-sensor",
+            "/ws-sensor-sockjs");
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
+        // Exclude API paths from resource handler
         registry.addResourceHandler("/**")
                 .addResourceLocations("classpath:/static/")
                 .resourceChain(false)
@@ -42,10 +42,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
     private static class SpaResourceResolver implements ResourceResolver {
         @Override
         public Resource resolveResource(HttpServletRequest request, String requestPath,
-                                       List<? extends Resource> locations, ResourceResolverChain chain) {
-            // Check if this is an API route
-            if (isApiRoute(requestPath)) {
-                return null; // Let Spring handle API routes normally
+                List<? extends Resource> locations, ResourceResolverChain chain) {
+            // Check the full request URI first
+            String fullPath = request.getRequestURI();
+
+            // Check if this is an API route - return null immediately to let Spring MVC
+            // handle it
+            if (isApiRoute(fullPath) || isApiRoute(requestPath)) {
+                return null; // Let Spring handle API routes normally - don't serve index.html
             }
 
             // Try to resolve the requested resource using the chain
@@ -61,7 +65,7 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
         @Override
         public String resolveUrlPath(String resourcePath, List<? extends Resource> locations,
-                                    ResourceResolverChain chain) {
+                ResourceResolverChain chain) {
             if (isApiRoute(resourcePath)) {
                 return null;
             }
@@ -95,4 +99,3 @@ public class WebMvcConfig implements WebMvcConfigurer {
         }
     }
 }
-

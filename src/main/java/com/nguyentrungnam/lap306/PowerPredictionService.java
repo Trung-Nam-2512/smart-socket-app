@@ -38,7 +38,7 @@ public class PowerPredictionService {
                 .findFirstByDeviceIdOrderByTimestampDesc(deviceId);
 
         if (latest == null) {
-            result.put("error", "Khong co du lieu");
+            result.put("error", "No data available");
             return result;
         }
 
@@ -90,29 +90,29 @@ public class PowerPredictionService {
     }
 
     /**
-     * Tạo message cảnh báo cho người dùng
+     * Generate prediction message for user
      */
     private String generateMessage(Integer hours, Double energyKwh, Double costVnd) {
         if (hours == 24) {
-            return String.format("Neu tiep tuc su dung nhu hien tai, ban se tieu thu khoang %.2f so dien trong 24h, tuong duong %s VND",
+            return String.format("If you continue using at current rate, you will consume about %.2f kWh in 24 hours, equivalent to %s VND",
                     energyKwh, formatCurrency(costVnd));
         } else if (hours == 720) {
-            return String.format("Neu tiep tuc su dung nhu hien tai, ban se tieu thu khoang %.2f so dien trong 1 thang, tuong duong %s VND",
+            return String.format("If you continue using at current rate, you will consume about %.2f kWh in 1 month, equivalent to %s VND",
                     energyKwh, formatCurrency(costVnd));
         } else {
-            return String.format("Neu tiep tuc su dung nhu hien tai trong %d gio, ban se tieu thu khoang %.2f so dien, tuong duong %s VND",
+            return String.format("If you continue using at current rate for %d hours, you will consume about %.2f kWh, equivalent to %s VND",
                     hours, energyKwh, formatCurrency(costVnd));
         }
     }
 
     /**
-     * Format số tiền VNĐ
+     * Format currency in VND
      */
     private String formatCurrency(Double amount) {
         if (amount >= 1000000) {
-            return String.format("%.1f trieu", amount / 1000000.0);
+            return String.format("%.1f million", amount / 1000000.0);
         } else if (amount >= 1000) {
-            return String.format("%.1f nghin", amount / 1000.0);
+            return String.format("%.1f thousand", amount / 1000.0);
         } else {
             return String.format("%.0f", amount);
         }
