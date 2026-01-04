@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: lap306-postgres
+    environment:
+      POSTGRES_DB: IoT
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: trungnam
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - iot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Spring Boot Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lap306-app
+    environment:
+      # Database Configuration
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/IoT
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: trungnam
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      
+      # MQTT Configuration
+      MQTT_BROKER_URL: tcp://phuongnamdts.com:4783
+      MQTT_CLIENT_ID: spring-boot-client
+      MQTT_USERNAME: baonammqtt
+      MQTT_PASSWORD: mqtt@d1git
+      
+      # Server Configuration
+      SERVER_PORT: 1446
+      SPRING_APPLICATION_NAME: lap306
+    ports:
+      - "1446:1446"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - iot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:1446/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  iot-network:
+    driver: bridge
+

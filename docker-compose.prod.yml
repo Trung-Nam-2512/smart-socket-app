@@ -1,0 +1,104 @@
+version: '3.8'
+
+# Production configuration với các cải tiến về bảo mật và hiệu năng
+
+services:
+  # PostgreSQL Database - Production
+  postgres:
+    image: postgres:15-alpine
+    container_name: lap306-postgres-prod
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-IoT}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Tối ưu hiệu năng
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=C"
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Backup tự động (nếu cần)
+      # - ./backups:/backups
+    networks:
+      - iot-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    # Bảo mật: không expose port ra ngoài trong production (chỉ dùng internal network)
+    # ports:
+    #   - "5432:5432"  # Comment out nếu chỉ dùng internal network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  # Spring Boot Application - Production
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lap306-app-prod
+    environment:
+      # Database Configuration
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-IoT}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_DDL_AUTO:-validate}
+      
+      # MQTT Configuration
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID:-spring-boot-client}
+      MQTT_USERNAME: ${MQTT_USERNAME}
+      MQTT_PASSWORD: ${MQTT_PASSWORD}
+      
+      # Server Configuration
+      SERVER_PORT: 1446
+      SPRING_APPLICATION_NAME: lap306
+      
+      # JVM Options cho production
+      JAVA_OPTS: >-
+        -Xms256m
+        -Xmx512m
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=200
+        -Djava.security.egd=file:/dev/./urandom
+    ports:
+      - "${APP_PORT:-1446}:1446"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - iot-network
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:1446/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 512M
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  iot-network:
+    driver: bridge
+
